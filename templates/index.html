@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Single Pose Hand Hygiene Test</title>
+
+  <style>
+    /* ---------- BASIC PAGE STYLES ---------- */
+    body {
+      text-align: center;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .main {
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+
+    /* ---------- VIDEO STREAM BOX ---------- */
+    .video-container {
+      margin: 20px 0;
+      border: 3px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+      display: inline-block;
+    }
+
+    /* ---------- HAND PROGRESS BARS ---------- */
+    .status-boxes {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin: 30px auto;
+    }
+
+    .status-container {
+      width: 150px;
+      height: 30px;
+      border: 2px solid #000;
+      background: white;
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .fill-bar {
+      height: 100%;
+      background: #06d6a0;
+      transition: width 0.3s ease;
+      position: absolute;
+      top: 0;
+    }
+
+    #leftFill { left: 0; }
+    #rightFill { right: 0; }
+
+    .hand-label {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    /* ---------- OVERALL PROGRESS ---------- */
+    .pose-progress {
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 20px 0;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .overall-progress {
+      width: 100%;
+      height: 20px;
+      background: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .overall-fill {
+      height: 100%;
+      background: #2196F3;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    /* ---------- POSE NAME DISPLAY ---------- */
+    .pose-name {
+      font-size: 24px;
+      font-weight: bold;
+      color: black;
+      text-transform: uppercase;
+      margin-top: 20px;
+    }
+
+    /* ---------- COMPLETION MESSAGE ---------- */
+    .completion-message {
+      color: #4CAF50;
+      font-size: 18px;
+      font-weight: bold;
+      margin: 10px;
+      display: none;
+    }
+
+    /* ---------- RESET BUTTON ---------- */
+    .reset-button {
+      padding: 10px 20px;
+      background: #FF6F61;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .reset-button:hover {
+      background: #e55d49;
+    }
+
+    /* ---------- DEBUG INFO ---------- */
+    .debug-info {
+      background: #f0f0f0;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      margin-left: 10px;
+    }
+
+    .status-positive { background: #4CAF50; }
+    .status-negative { background: #f44336; }
+    .status-error { background: #ff9800; }
+
+    /* ---------- TIMER ---------- */
+    .time-taken {
+      font-size: 18px;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Single Pose Hand Hygiene Test</h1>
+
+  <div class="main">
+    <!-- Message shown when pose is completed -->
+    <div id="completionMessage" class="completion-message">
+      🎉 Pose successfully completed! 🎉
+    </div>
+
+    <!-- Reset button for restarting the single pose test -->
+    <button id="resetButton" class="reset-button" style="display:none;">Reset</button>
+
+    <!-- Display the expected pose -->
+    <div id="poseName" class="pose-name">Expected Pose: HANDWASH</div>
+
+    <!-- Debug info to show status and indicator -->
+    <div class="debug-info">
+      Status: <span id="statusText">Loading...</span>
+      <span id="statusIndicator" class="status-indicator"></span>
+    </div>
+
+    <!-- Video stream from backend -->
+    <div class="video-container">
+      <img id="videoStream" src="{{ url_for('video') }}" width="640" height="480" />
+    </div>
+
+    <!-- Left and Right hand progress bars -->
+    <div class="status-boxes">
+      <div>
+        <div class="status-container">
+          <div id="leftFill" class="fill-bar"></div>
+        </div>
+        <p class="hand-label">Left Hand</p>
+      </div>
+
+      <div>
+        <div class="status-container">
+          <div id="rightFill" class="fill-bar"></div>
+        </div>
+        <p class="hand-label">Right Hand</p>
+      </div>
+    </div>
+
+    <!-- Overall progress for the pose -->
+    <div class="pose-progress">
+      <h4>Overall Progress</h4>
+      <div class="overall-progress">
+        <div id="overallFill" class="overall-fill"></div>
+      </div>
+      <p>Pose 1 of 1</p>
+    </div>
+
+    <!-- Timer to show how long the user took -->
+    <div class="time-taken">
+      Time Taken: <span id="timeTaken">Not started yet</span>
+    </div>
+  </div>
+
+  <script>
+    // -------- VARIABLES TO TRACK PROGRESS AND TIMER --------
+    let leftProgress = 0, rightProgress = 0; // hand progress percentage
+    let isComplete = false; // is pose completed
+    let startTime = null; // store start time
+    let timerInterval = null; // interval for updating timer
+
+    // -------- DOM ELEMENTS --------
+    const leftFill = document.getElementById("leftFill"),
+          rightFill = document.getElementById("rightFill"),
+          overallFill = document.getElementById("overallFill"),
+          completionMessage = document.getElementById("completionMessage"),
+          resetButton = document.getElementById("resetButton"),
+          statusText = document.getElementById("statusText"),
+          statusIndicator = document.getElementById("statusIndicator"),
+          poseName = document.getElementById("poseName"),
+          timeTaken = document.getElementById("timeTaken"),
+          videoStream = document.getElementById("videoStream");
+
+    // -------- FUNCTION TO UPDATE PROGRESS BARS --------
+    function updateProgressBars() {
+      leftFill.style.width = leftProgress + "%"; // left hand progress
+      rightFill.style.width = rightProgress + "%"; // right hand progress
+      overallFill.style.width = ((leftProgress + rightProgress) / 2) + "%"; // overall progress
+    }
+
+    // -------- START TIMER WHEN VIDEO LOADS --------
+    function startTimer() {
+      if (startTime) return; // timer already running
+      startTime = Date.now();
+      timerInterval = setInterval(() => {
+        if (!isComplete && startTime) {
+          const elapsed = (Date.now() - startTime) / 1000;
+          timeTaken.textContent = elapsed.toFixed(2) + " seconds"; // show elapsed time
+        }
+      }, 100);
+    }
+
+    // -------- STOP TIMER WHEN POSE COMPLETED --------
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
+    // -------- POLL BACKEND FOR SINGLE POSE STATUS --------
+    function pollStatus() {
+      if (isComplete) return;
+
+      fetch('/status') // backend should send single pose info
+        .then(res => res.json())
+        .then(data => {
+          statusText.textContent = data.status; // update status text
+
+          // update status indicator color
+          if (data.status === "positive") {
+            statusIndicator.className = "status-indicator status-positive";
+          } else {
+            statusIndicator.className = "status-indicator status-negative";
+          }
+
+          // update left/right hand progress
+          leftProgress = data.pose_info.leftProgress;
+          rightProgress = data.pose_info.rightProgress;
+          updateProgressBars();
+
+          // if pose completed, show message and reset button
+          if (data.pose_info.is_complete) {
+            completionMessage.style.display = "block";
+            resetButton.style.display = "inline-block";
+            isComplete = true;
+            stopTimer();
+          }
+        })
+        .catch(() => {
+          statusText.textContent = "error"; // error while fetching
+          statusIndicator.className = "status-indicator status-error";
+        });
+    }
+
+    // -------- RESET BUTTON FUNCTIONALITY --------
+    resetButton.onclick = () => {
+      fetch('/reset', { method: 'POST' }).then(() => {
+        leftProgress = rightProgress = 0;
+        isComplete = false;
+        startTime = null;
+        updateProgressBars();
+        completionMessage.style.display = "none";
+        resetButton.style.display = "none";
+        timeTaken.textContent = "Not started yet";
+        stopTimer();
+        setTimeout(startTimer, 500); // restart timer
+      });
+    };
+
+    // -------- WHEN VIDEO LOADS, START TIMER AND POLLING --------
+    videoStream.onload = () => {
+      startTimer();
+      setInterval(pollStatus, 300); // poll backend every 0.3 sec
+    };
+
+    updateProgressBars(); // initialize progress bars
+  </script>
+</body>
+</html>
