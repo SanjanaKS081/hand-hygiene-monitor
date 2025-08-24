@@ -1,3 +1,4 @@
+
 # Real Time Hand Hygiene Monitoring 🧼👐
 
 Welcome!
@@ -103,3 +104,7 @@ pip install flask opencv-python mediapipe ultralytics numpy matplotlib
 
 ## Author
 **Sanjana Kottalavadi Shivashankarappa**
+=======
+# hand-hygiene-monitor
+ “Real-time hand hygiene monitoring using front-facing webcam”
+>>>>>>> 5899282f009024db6d7b647a63f6ea30fd926e8c
